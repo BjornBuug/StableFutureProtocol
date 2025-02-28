@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.22;
+pragma solidity =0.8.28;
 
 import {OwnableUpgradeable} from "openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {IStableFutureVault} from "../interfaces/IStableFutureVault.sol";
@@ -16,29 +16,32 @@ abstract contract ModuleUpgradeable {
 
     // Only owner modifier
     modifier onlyVaultOwner() {
-        if (OwnableUpgradeable(address(vault)).owner() != msg.sender)
+        if (OwnableUpgradeable(address(vault)).owner() != msg.sender) {
             revert StableFutureErrors.OnlyVaultOwner(msg.sender);
+        }
         _;
     }
 
     modifier whenNotPaused() {
-        if (vault.isModulePaused(MODULE_KEY))
+        if (vault.isModulePaused(MODULE_KEY)) {
             revert StableFutureErrors.Paused(MODULE_KEY);
+        }
         _;
     }
 
     /**
-        Create a function that allow to set the encode version of the key module and the vault address each time 
-        we initilize new upgradable conract
-        1- has 2 params
-        2- Check if the module exist and check that the vault is not address(0)
-    */
+     * Create a function that allow to set the encode version of the key module and the vault address each time 
+     *     we initilize new upgradable conract
+     *     1- has 2 params
+     *     2- Check if the module exist and check that the vault is not address(0)
+     */
 
     /// @notice Setter for the vault contract.
     /// @dev Can be used in case StableFutureVault ever changes.
     function setVault(IStableFutureVault _vault) external onlyVaultOwner {
-        if (address(_vault) == address(0))
+        if (address(_vault) == address(0)) {
             revert StableFutureErrors.ZeroAddress("vault");
+        }
 
         vault = _vault;
     }
@@ -46,14 +49,13 @@ abstract contract ModuleUpgradeable {
     /// @dev Function to initilize the module
     /// @param _moduleKey the bytes32 encoded key of the module
     /// @param _vault StableFutureVault address
-    function __init_Module(
-        bytes32 _moduleKey,
-        IStableFutureVault _vault
-    ) internal {
-        if (_moduleKey == bytes32(""))
+    function __init_Module(bytes32 _moduleKey, IStableFutureVault _vault) internal {
+        if (_moduleKey == bytes32("")) {
             revert StableFutureErrors.ModuleKeyEmpty();
-        if (address(_vault) == address(0))
+        }
+        if (address(_vault) == address(0)) {
             revert StableFutureErrors.ZeroAddress("vault");
+        }
         MODULE_KEY = _moduleKey;
         vault = _vault;
     }

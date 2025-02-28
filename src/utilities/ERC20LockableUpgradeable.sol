@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: SEE LICENSE IN LICENSE
-pragma solidity ^0.8.22;
+pragma solidity =0.8.28;
 
 import {ERC20Upgradeable} from "openzeppelin-contracts-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol";
 import {Initializable} from "openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
@@ -33,10 +33,7 @@ contract ERC20LockableUpgradeable is Initializable, ERC20Upgradeable {
     }
 
     function _unlock(address account, uint256 amount) internal virtual {
-        require(
-            _lockedAmount[account] >= amount,
-            "ERC20LockableUpgradeable: requested unlock exceeds locked balance"
-        );
+        require(_lockedAmount[account] >= amount, "ERC20LockableUpgradeable: requested unlock exceeds locked balance");
 
         _lockedAmount[account] -= amount;
 

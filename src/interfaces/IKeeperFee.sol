@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.22;
+pragma solidity =0.8.28;
 
 interface IKeeperFee {
     function getKeeperFee() external view returns (uint256 keeperFee);
@@ -16,8 +16,5 @@ interface IKeeperFee {
             uint256 gasUnitsL2
         );
 
-    function setParameters(
-        uint256 keeperFeeUpperBound,
-        uint256 keeperFeeLowerBound
-    ) external;
+    function setParameters(uint256 keeperFeeUpperBound, uint256 keeperFeeLowerBound) external;
 }

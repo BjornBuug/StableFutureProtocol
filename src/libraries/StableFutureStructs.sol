@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.22;
+pragma solidity =0.8.28;
 
 import {IChainlinkAggregatorV3} from "../interfaces/IChainlinkAggregatorV3.sol";
 import {IPyth} from "pyth-sdk-solidity/IPyth.sol";
@@ -9,6 +9,14 @@ library StableFutureStructs {
         None, // 1
         Deposit, // 2
         Withdraw // 3
+
+    }
+
+    /// @notice Global position data
+    struct GlobalPosition {
+        int256 totalDepositedMargin;
+        uint256 averagePrice;
+        uint256 totalOpenedPositions;
     }
 
     struct Order {
@@ -53,4 +61,6 @@ library StableFutureStructs {
         bytes32 moduleKey;
         address moduleAddress;
     }
+
+    
 }

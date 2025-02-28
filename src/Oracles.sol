@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.22;
+pragma solidity =0.8.28;
 
 import {IERC20} from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -7,7 +7,8 @@ import {StableFutureStructs} from "src/libraries/StableFutureStructs.sol";
 import {StableFutureErrors} from "src/libraries/StableFutureErrors.sol";
 import {StableFutureEvents} from "src/libraries/StableFutureEvents.sol";
 import {StableModuleKeys} from "src/libraries/StableModuleKeys.sol";
-import {ReentrancyGuardUpgradeable} from "openzeppelin-contracts-upgradeable/contracts/utils/ReentrancyGuardUpgradeable.sol";
+import {ReentrancyGuardUpgradeable} from
+    "openzeppelin-contracts-upgradeable/contracts/utils/ReentrancyGuardUpgradeable.sol";
 import {ModuleUpgradeable} from "src/abstracts/ModuleUpgradeable.sol";
 import {IStableFutureVault} from "src/interfaces/IStableFutureVault.sol";
 import {IChainlinkAggregatorV3} from "src/interfaces/IChainlinkAggregatorV3.sol";
@@ -60,54 +61,32 @@ contract Oracles is ReentrancyGuardUpgradeable, ModuleUpgradeable {
         _setAsset(_asset);
     }
 
-    function updatePythPrice(
-        address sender,
-        bytes[] calldata updatePriceData
-    ) external payable nonReentrant {
+    function updatePythPrice(address sender, bytes[] calldata updatePriceData) external payable nonReentrant {
         // get the fees to pay for updatePriceData
-        uint256 fee = pythNetworkOracle.pythNetworkContract.getUpdateFee(
-            updatePriceData
-        );
+        uint256 fee = pythNetworkOracle.pythNetworkContract.getUpdateFee(updatePriceData);
 
         // update the price
-        pythNetworkOracle.pythNetworkContract.updatePriceFeeds{value: fee}(
-            updatePriceData
-        );
+        pythNetworkOracle.pythNetworkContract.updatePriceFeeds{value: fee}(updatePriceData);
 
         // refund any remaining ETH
         if (msg.value - fee > 0) {
-            (bool succ, ) = sender.call{value: msg.value - fee}("");
+            (bool succ,) = sender.call{value: msg.value - fee}("");
             if (!succ) revert StableFutureErrors.RefundFailed();
         }
     }
 
-    function getPrice(
-        uint32 maxAge
-    ) external view returns (uint256 price, uint256 timestamp) {
+    function getPrice(uint32 maxAge) external view returns (uint256 price, uint256 timestamp) {
         (price, timestamp) = _getPrice(maxAge);
     }
 
-    function getPrice()
-        external
-        view
-        returns (uint256 price, uint256 timestamp)
-    {
+    function getPrice() external view returns (uint256 price, uint256 timestamp) {
         (price, timestamp) = _getPrice(type(uint32).max);
     }
 
-    function _getPrice(
-        uint32 maxAge
-    ) internal view returns (uint256 price, uint256 timestamp) {
+    function _getPrice(uint32 maxAge) internal view returns (uint256 price, uint256 timestamp) {
         // 1- Retrieve both prices from both oracles
-        (
-            uint256 chainlinkTimestamp,
-            uint256 chainlinkPrice
-        ) = _getChainlinkPrice();
-        (
-            uint256 pythPrice,
-            bool invalidPythPrice,
-            uint256 pythTimestamp
-        ) = _getPythNetworkPrice();
+        (uint256 chainlinkTimestamp, uint256 chainlinkPrice) = _getChainlinkPrice();
+        (uint256 pythPrice, bool invalidPythPrice, uint256 pythTimestamp) = _getPythNetworkPrice();
 
         bool pythPriceUsed;
 
@@ -146,11 +125,7 @@ contract Oracles is ReentrancyGuardUpgradeable, ModuleUpgradeable {
         }
     }
 
-    function _getChainlinkPrice()
-        internal
-        view
-        returns (uint256 timestamp, uint256 price)
-    {
+    function _getChainlinkPrice() internal view returns (uint256 timestamp, uint256 price) {
         // Get the contract address of chainlink contract associtated with the pair
         IChainlinkAggregatorV3 oracle = chainlinkOracle.chainlinkOracle;
 
@@ -159,30 +134,22 @@ contract Oracles is ReentrancyGuardUpgradeable, ModuleUpgradeable {
         }
 
         // get the price using latestRoundData
-        (, int256 answer, , uint256 updatedAt, ) = oracle.latestRoundData();
+        (, int256 answer,, uint256 updatedAt,) = oracle.latestRoundData();
 
         // Check if the price is stale or within a certain freshness window
         if (block.timestamp - updatedAt > chainlinkOracle.maxAge) {
-            revert StableFutureErrors.PriceStale(
-                StableFutureErrors.PriceSource.chainlinkOracle
-            ); // add which price is stale
+            revert StableFutureErrors.PriceStale(StableFutureErrors.PriceSource.chainlinkOracle); // add which price is stale
         }
 
         if (answer > 0) {
             price = uint256(answer) * (10 ** 10); // convert the return value from 8 to 18 decimals
             timestamp = updatedAt;
         } else {
-            revert StableFutureErrors.InvalidPrice(
-                StableFutureErrors.PriceSource.chainlinkOracle
-            );
+            revert StableFutureErrors.InvalidPrice(StableFutureErrors.PriceSource.chainlinkOracle);
         }
     }
 
-    function _getPythNetworkPrice()
-        internal
-        view
-        returns (uint256 price, bool invalid, uint256 timestamp)
-    {
+    function _getPythNetworkPrice() internal view returns (uint256 price, bool invalid, uint256 timestamp) {
         // get the Pyth oracle address contract
         IPyth oracle = pythNetworkOracle.pythNetworkContract;
 
@@ -191,32 +158,20 @@ contract Oracles is ReentrancyGuardUpgradeable, ModuleUpgradeable {
         }
 
         // get the price
-        try
-            oracle.getPriceNoOlderThan(
-                pythNetworkOracle.priceId,
-                pythNetworkOracle.maxAge
-            )
-        returns (PythStructs.Price memory oracleData) {
+        try oracle.getPriceNoOlderThan(pythNetworkOracle.priceId, pythNetworkOracle.maxAge) returns (
+            PythStructs.Price memory oracleData
+        ) {
             // Check if the price is not invalid based on the passed params to getPriceNoOlderThan
-            if (
-                oracleData.price > 0 &&
-                oracleData.conf > 0 &&
-                oracleData.expo < 0
-            ) {
+            if (oracleData.price > 0 && oracleData.conf > 0 && oracleData.expo < 0) {
                 // scale the price to 18 decimals
-                price =
-                    ((oracleData.price).toUint256()) *
-                    (10 ** (18 + oracleData.expo).toUint256());
+                price = ((oracleData.price).toUint256()) * (10 ** (18 + oracleData.expo).toUint256());
 
                 timestamp = oracleData.publishTime;
 
                 // check if the price is accurate(respecte the minimum price confidence)
                 // Devide the returns price but the returned confidence
                 // conf price should always be greater than minConfiRatio
-                if (
-                    oracleData.price / int64(oracleData.conf) <
-                    int32(pythNetworkOracle.minConfidenceRatio)
-                ) {
+                if (oracleData.price / int64(oracleData.conf) < int32(pythNetworkOracle.minConfidenceRatio)) {
                     invalid = true;
                 }
             } else {
@@ -235,47 +190,33 @@ contract Oracles is ReentrancyGuardUpgradeable, ModuleUpgradeable {
      * @dev Sets the chainlinkOracle configuration.
      * @param newOracle The new chainlinkOracle struct to be set.
      */
-    function _setchainlinkOracle(
-        StableFutureStructs.ChainlinkOracle calldata newOracle
-    ) internal {
+    function _setchainlinkOracle(StableFutureStructs.ChainlinkOracle calldata newOracle) internal {
         // Sanity checks
-        if (
-            address(newOracle.chainlinkOracle) == address(0) ||
-            newOracle.maxAge <= 0
-        ) revert StableFutureErrors.InvalidOracleConfig();
+        if (address(newOracle.chainlinkOracle) == address(0) || newOracle.maxAge <= 0) {
+            revert StableFutureErrors.InvalidOracleConfig();
+        }
 
         // set chainLink oracle config to struct
-        chainlinkOracle = StableFutureStructs.ChainlinkOracle(
-            newOracle.chainlinkOracle,
-            newOracle.maxAge
-        );
+        chainlinkOracle = StableFutureStructs.ChainlinkOracle(newOracle.chainlinkOracle, newOracle.maxAge);
 
         // Emit the event
         emit StableFutureEvents.NewchainlinkOracleSet(newOracle);
     }
 
     /**
-
      * @dev Sets the PythNetworkOracle configuration.
      * @param newOracle The new PythNetworkOracle struct to be set.
      */
-    function _setPythNetworkOracle(
-        StableFutureStructs.PythNetworkOracle calldata newOracle
-    ) internal {
+    function _setPythNetworkOracle(StableFutureStructs.PythNetworkOracle calldata newOracle) internal {
         // Check the validity of these configs
         if (
-            address(newOracle.pythNetworkContract) == address(0) ||
-            newOracle.priceId == bytes32(0) ||
-            newOracle.maxAge <= 0 ||
-            newOracle.minConfidenceRatio <= 0
+            address(newOracle.pythNetworkContract) == address(0) || newOracle.priceId == bytes32(0)
+                || newOracle.maxAge <= 0 || newOracle.minConfidenceRatio <= 0
         ) revert StableFutureErrors.InvalidOracleConfig();
 
         // Set new Pyth network config to struct
         pythNetworkOracle = StableFutureStructs.PythNetworkOracle(
-            newOracle.pythNetworkContract,
-            newOracle.priceId,
-            newOracle.maxAge,
-            newOracle.minConfidenceRatio
+            newOracle.pythNetworkContract, newOracle.priceId, newOracle.maxAge, newOracle.minConfidenceRatio
         );
 
         emit StableFutureEvents.NewPythNetworkOracleSet(newOracle);
@@ -286,19 +227,21 @@ contract Oracles is ReentrancyGuardUpgradeable, ModuleUpgradeable {
      * @param _asset The new asset address to be set.
      */
     function _setAsset(address _asset) internal {
-        if (_asset == address(0))
+        if (_asset == address(0)) {
             revert StableFutureErrors.ZeroAddress("newAsset");
+        }
 
         asset = _asset;
 
         emit StableFutureEvents.AssetSet(_asset);
     }
 
-    /** * @dev the priceDiff between chainlink and Pyth must be bewteen 0(no difference is tolerated) and
-               maxPriceDiffPerecent(any difference is acceptable) 1e18 = 100%
-        * @dev Sets the maximum price difference percentage.
-        * @param _maxPriceDiffPercent The new maximum price difference percentage to be set.
-    */
+    /**
+     * @dev the priceDiff between chainlink and Pyth must be bewteen 0(no difference is tolerated) and
+     *            maxPriceDiffPerecent(any difference is acceptable) 1e18 = 100%
+     * @dev Sets the maximum price difference percentage.
+     * @param _maxPriceDiffPercent The new maximum price difference percentage to be set.
+     */
     function _setMaxPriceDiffPercent(uint256 _maxPriceDiffPercent) internal {
         if (_maxPriceDiffPercent == 0 || _maxPriceDiffPercent > 1e18) {
             revert StableFutureErrors.InvalidOracleConfig();
@@ -323,9 +266,7 @@ contract Oracles is ReentrancyGuardUpgradeable, ModuleUpgradeable {
         _setPythNetworkOracle(newPythOracle);
     }
 
-    function setNewMaxDiffPercent(
-        uint256 _maxDiffPercent
-    ) external onlyVaultOwner {
+    function setNewMaxDiffPercent(uint256 _maxDiffPercent) external onlyVaultOwner {
         _setMaxPriceDiffPercent(_maxDiffPercent);
     }
 }

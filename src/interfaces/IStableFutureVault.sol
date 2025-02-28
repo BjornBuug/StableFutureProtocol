@@ -1,14 +1,13 @@
-// SPDX-License-Identifier: SEE LICENSE IN LICENSE
-pragma solidity ^0.8.22;
+// SPDX-License-Identifier: BUSL-1.1
+pragma solidity =0.8.28;
 
 import {IERC20} from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import {StableFutureStructs} from "../libraries/StableFutureStructs.sol";
 
 interface IStableFutureVault {
-    function _executeDeposit(
-        address account,
-        StableFutureStructs.AnnouncedLiquidityDeposit calldata liquidityDeposit
-    ) external returns (uint256 liquidityMinted);
+    function _executeDeposit(address account, StableFutureStructs.AnnouncedLiquidityDeposit calldata liquidityDeposit)
+        external
+        returns (uint256 liquidityMinted);
 
     function _executeWithdraw(
         address _account,
@@ -17,21 +16,13 @@ interface IStableFutureVault {
 
     function collateral() external view returns (IERC20 collateral);
 
-    function depositQuote(
-        uint256 _depositAmount
-    ) external view returns (uint256 _amountOut);
+    function depositQuote(uint256 _depositAmount) external view returns (uint256 _amountOut);
 
     // function lastRecomputedFundingTimestamp() external view returns (uint64 lastRecomputedFundingTimestamp);
 
-    function minExecutabilityAge()
-        external
-        view
-        returns (uint64 minExecutabilityAge);
+    function minExecutabilityAge() external view returns (uint64 minExecutabilityAge);
 
-    function maxExecutabilityAge()
-        external
-        view
-        returns (uint64 maxExecutabilityAge);
+    function maxExecutabilityAge() external view returns (uint64 maxExecutabilityAge);
 
     // function lastRecomputedFundingRate() external view returns (int256 lastRecomputedFundingRate);
 
@@ -41,28 +32,19 @@ interface IStableFutureVault {
 
     // function maxVelocitySkew() external view returns (uint256 maxVelocitySkew);
 
-    function stableCollateralTotal()
-        external
-        view
-        returns (uint256 totalAmount);
+    function stableCollateralTotal() external view returns (uint256 totalAmount);
 
     // function skewFractionMax() external view returns (uint256 skewFractionMax);
 
-    function moduleAddress(
-        bytes32 _moduleKey
-    ) external view returns (address moduleAddress);
+    function moduleAddress(bytes32 _moduleKey) external view returns (address moduleAddress);
 
     // function isAuthorizedModule(address _address) external view returns (bool status);
 
-    function isModulePaused(
-        bytes32 moduleKey
-    ) external view returns (bool paused);
+    function isModulePaused(bytes32 moduleKey) external view returns (bool paused);
 
     function sendCollateral(address to, uint256 amount) external;
 
-    function withdrawQuote(
-        uint256 _withdrawAmount
-    ) external view returns (uint256 _amountOut);
+    function withdrawQuote(uint256 _withdrawAmount) external view returns (uint256 _amountOut);
 
     function lock(address account, uint256 amount) external;
 

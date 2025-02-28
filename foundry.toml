@@ -2,5 +2,18 @@
 src = 'src'
 out = 'out'
 libs = ['lib']
+test = 'test'
+verbosity = 2
+optimizer = true
+optimizer-runs = 500
+auto_detect_solc = true
+evm_version = 'paris'
+ignored_error_codes = [2018, 2072]
 
+[profile.openzeppelin]
+ast = true
+build_info = true
+extra_output = ["storageLayout"]
+ffi = true
+fs_permissions = [{ access = 'read-write', path = './'}]
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
