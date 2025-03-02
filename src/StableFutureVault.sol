@@ -30,6 +30,11 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
 
     StableFutureStructs.GlobalPosition _globalPosition;
 
+    uint256 lastRecomputedFundingTimestamp;
+    uint256 maxFundingVelocity;
+    uint256 maxSkewVelocity;
+
+
     // represent 1.0 unit
     int256 constant public UNIT = 1e18;
 
@@ -269,10 +274,64 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
         int256 propotionalSkew = _calcPropotionalSkew({
             _skew: int256(_globalPosition.totalDepositedMargin) - int256(totalDepositedLiquidity),
             _totalDepositedLiquidity: totalDepositedLiquidity
+        }); 
+
+        // calculte unrecorded funding since last time was recomputed
+        fundingChangeSinceRecomputed = _fundingChangeSinceRecomputed({
+            _propotionalSkew: propotionalSkew,
+            _lastFundingTimestamp: lastRecomputedFundingTimestamp,
+            _maxFundingVelocity:maxFundingVelocity,
+            _maxSkewVelocity: maxSkewVelocity
         });
 
+    }
 
-        
+    function _fundingChangeSinceRecomputed(
+        int256 _propotionalSkew,
+        uint256 _lastFundingTimestamp,
+        uint256 _maxFundingVelocity,
+        uint256 _maxSkewVelocity
+    ) 
+        internal 
+        returns(int256) {
+        // calculate the funding rate changes since last time was updated
+        // formula: fundinVelocity * timeElapsed / 1e18
+        return  _accruedFundingVelocity(
+                    _propotionalSkew,
+                    _maxFundingVelocity,
+                    _maxSkewVelocity
+                    ) * int256(_proportionalElapsedTime(_lastFundingTimestamp)) 
+                    / UNIT;
+    }
+
+    // calculte the time elapsed between the last funding rate blocktimestamp and the current block.timestamp
+    // normalize it in days
+    function _proportionalElapsedTime(
+        uint256 _lastFundingTimestamp
+    ) 
+        internal
+        view
+        returns(uint256 elapsedTime) {
+        return (block.timestamp - _lastFundingTimestamp) * uint256(UNIT) / 1 days;
+    }
+         
+
+    function _accruedFundingVelocity(
+        int256 _propotionalSkew,
+        uint256 _maxFundingVelocity,
+        uint256 _maxSkewVelocity
+    )
+        internal
+        view
+        returns(int256 currfundingVelocity) {
+        // check if the _propotionalSkew is greater thn zero
+        if(_propotionalSkew > 0) {
+            currfundingVelocity = _propotionalSkew * int256(_maxFundingVelocity) / int256(_maxSkewVelocity); 
+            // make sure fundingVelocity whitin maxfundinVelocity
+            return int256(maxFundingVelocity).min(currfundingVelocity.max(-int256(maxFundingVelocity)));
+        } 
+
+        return _propotionalSkew * int256(_maxFundingVelocity) / UNIT;
     }
 
     
