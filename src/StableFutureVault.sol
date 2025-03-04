@@ -11,12 +11,11 @@ import {ERC20LockableUpgradeable} from "./utilities/ERC20LockableUpgradeable.sol
 import {ModuleUpgradeable} from "./abstracts/ModuleUpgradeable.sol";
 import {SignedMath} from "openzeppelin-contracts/contracts/utils/math/SignedMath.sol";
 
-
 /**
- * TODO: 
+ * TODO:
  *     -
- *     - 
- *     - 
+ *     -
+ *     -
  *     -
  */
 
@@ -34,9 +33,8 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
     uint256 maxFundingVelocity;
     uint256 maxSkewVelocity;
 
-
     // represent 1.0 unit
-    int256 constant public UNIT = 1e18;
+    int256 public constant UNIT = 1e18;
 
     /// @notice collateral deposited by the LP to get StableFuture Token
     IERC20 public collateral;
@@ -52,6 +50,9 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
 
     /// @notice Minimum liquidity to provide as a first depositor
     uint256 public constant MIN_LIQUIDITY = 10_000;
+
+    // the last recomputed funding rat
+    int256 public lastRecomputedFundingRate;
 
     /// @notice module to bool to pause and unpause a contract module
     mapping(bytes32 moduleKey => bool paused) public isModulePaused;
@@ -85,7 +86,8 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
         uint64 _minExecutabilityAge,
         uint64 _maxExecutabilityAge,
         uint256
-    ) external initializer { // <= can only be called once on the proxy contract level
+    ) external initializer {
+        // <= can only be called once on the proxy contract level
         if (_owner == address(0)) {
             revert StableFutureErrors.ZeroAddress("Owner");
         }
@@ -252,100 +254,90 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
         totalDepositedLiquidity = (newTotalVaultDeposit > 0) ? uint256(newTotalVaultDeposit) : 0;
     }
 
-
-
     function settleFundingFees() public {
-
         _getUnrecordedFunding();
     }
 
     /**
-     * @dev 
+     * @dev
      * @return fundingChangeSinceRecomputed the change in the funding rate since the last recomputation
      * to measure time elapsed since the last settelment
      * @return unrecordedFunding total funding fees accrued but not recorded/setteled yet
      */
-    function _getUnrecordedFunding() 
-        internal
-        view
-        returns(int256 fundingChangeSinceRecomputed, int256 unrecordedFunding) {
-        // calculte how imbalance the market is(skew) 
+    function _getUnrecordedFunding() internal returns (int256 fundingChangeSinceRecomputed, int256 unrecordedFunding) {
+        // calculte how imbalance the market is(skew)
         // formula: TotalOpenPosition - 'totalliquidity deposited by Liquidity providers
         int256 propotionalSkew = _calcPropotionalSkew({
             _skew: int256(_globalPosition.totalDepositedMargin) - int256(totalDepositedLiquidity),
             _totalDepositedLiquidity: totalDepositedLiquidity
-        }); 
+        });
 
-        // calculte unrecorded funding since last time was recomputed
+        // Calculates how much the funding rate has changed since the last update.
         fundingChangeSinceRecomputed = _fundingChangeSinceRecomputed({
             _propotionalSkew: propotionalSkew,
-            _lastFundingTimestamp: lastRecomputedFundingTimestamp,
-            _maxFundingVelocity:maxFundingVelocity,
+            _prevFundingTimeStamp: lastRecomputedFundingTimestamp,
+            _maxFundingVelocity: maxFundingVelocity,
             _maxSkewVelocity: maxSkewVelocity
         });
 
+        // calculte total unrecorded funding accured since the last settelement
+        unrecordedFunding = _calcUnrecordedFunding({
+            _currentFundingRate: fundingChangeSinceRecomputed + lastRecomputedFundingRate,
+            _prevFundingRate: lastRecomputedFundingRate,
+            _prevFundingTimestamp: lastRecomputedFundingTimestamp
+        });
+    }
+
+    function _calcUnrecordedFunding(int256 _currentFundingRate, int256 _prevFundingRate, uint256 _prevFundingTimestamp)
+        internal
+        returns (int256)
+    {
+        // calculte the average of the current funding rate + previous funding rate
+        int256 avgFundingRate = (_currentFundingRate + _prevFundingRate) / 2;
+        // calculate the average funding rate over the elapsed time since the last time the funding rate was updated.
+        return avgFundingRate * int256(_proportionalElapsedTime(_prevFundingTimestamp)) / UNIT;
     }
 
     function _fundingChangeSinceRecomputed(
         int256 _propotionalSkew,
-        uint256 _lastFundingTimestamp,
+        uint256 _prevFundingTimeStamp,
         uint256 _maxFundingVelocity,
         uint256 _maxSkewVelocity
-    ) 
-        internal 
-        returns(int256) {
+    ) internal returns (int256) {
         // calculate the funding rate changes since last time was updated
         // formula: fundinVelocity * timeElapsed / 1e18
-        return  _accruedFundingVelocity(
-                    _propotionalSkew,
-                    _maxFundingVelocity,
-                    _maxSkewVelocity
-                    ) * int256(_proportionalElapsedTime(_lastFundingTimestamp)) 
-                    / UNIT;
+        return _accruedFundingVelocity(_propotionalSkew, _maxFundingVelocity, _maxSkewVelocity)
+            * int256(_proportionalElapsedTime(_prevFundingTimeStamp)) / UNIT;
     }
 
     // calculte the time elapsed between the last funding rate blocktimestamp and the current block.timestamp
     // normalize it in days
-    function _proportionalElapsedTime(
-        uint256 _lastFundingTimestamp
-    ) 
-        internal
-        view
-        returns(uint256 elapsedTime) {
-        return (block.timestamp - _lastFundingTimestamp) * uint256(UNIT) / 1 days;
+    function _proportionalElapsedTime(uint256 _prevFundingTimeStamp) internal view returns (uint256 elapsedTime) {
+        return (block.timestamp - _prevFundingTimeStamp) * uint256(UNIT) / 1 days;
     }
-         
 
-    function _accruedFundingVelocity(
-        int256 _propotionalSkew,
-        uint256 _maxFundingVelocity,
-        uint256 _maxSkewVelocity
-    )
+    function _accruedFundingVelocity(int256 _propotionalSkew, uint256 _maxFundingVelocity, uint256 _maxSkewVelocity)
         internal
         view
-        returns(int256 currfundingVelocity) {
+        returns (int256 currfundingVelocity)
+    {
         // check if the _propotionalSkew is greater thn zero
-        if(_propotionalSkew > 0) {
-            currfundingVelocity = _propotionalSkew * int256(_maxFundingVelocity) / int256(_maxSkewVelocity); 
+        if (_propotionalSkew > 0) {
+            currfundingVelocity = _propotionalSkew * int256(_maxFundingVelocity) / int256(_maxSkewVelocity);
             // make sure fundingVelocity whitin maxfundinVelocity
             return int256(maxFundingVelocity).min(currfundingVelocity.max(-int256(maxFundingVelocity)));
-        } 
+        }
 
         return _propotionalSkew * int256(_maxFundingVelocity) / UNIT;
     }
 
-    
-    function _calcPropotionalSkew(int256 _skew, uint256 _totalDepositedLiquidity) 
-        private
-        view
-        returns(int256 pSkew) {
-    
-        if(_totalDepositedLiquidity > 0) {
+    function _calcPropotionalSkew(int256 _skew, uint256 _totalDepositedLiquidity) private view returns (int256 pSkew) {
+        if (_totalDepositedLiquidity > 0) {
             // normalize the skew by total liquidity deposited
             pSkew = _skew * UNIT / int256(_totalDepositedLiquidity);
 
             // ensure that pskew should always be between -1e18 & 1e18(cap it)
-            if(pSkew < -1e18 || pSkew > 1e18) {
+            if (pSkew < -1e18 || pSkew > 1e18) {
                 pSkew = UNIT.min(pSkew.max(-UNIT));
             }
         } else {
@@ -353,8 +345,6 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
             pSkew = 0;
         }
     }
-
-
 
     /////////////////////////////////////////////
     //            Setter Functions             //

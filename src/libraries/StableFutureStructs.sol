@@ -61,6 +61,4 @@ library StableFutureStructs {
         bytes32 moduleKey;
         address moduleAddress;
     }
-
-    
 }

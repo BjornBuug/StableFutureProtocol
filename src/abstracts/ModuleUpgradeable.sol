@@ -30,7 +30,7 @@ abstract contract ModuleUpgradeable {
     }
 
     /**
-     * Create a function that allow to set the encode version of the key module and the vault address each time 
+     * Create a function that allow to set the encode version of the key module and the vault address each time
      *     we initilize new upgradable conract
      *     1- has 2 params
      *     2- Check if the module exist and check that the vault is not address(0)
