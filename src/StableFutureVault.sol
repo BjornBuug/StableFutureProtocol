@@ -3,6 +3,7 @@ pragma solidity =0.8.28;
 
 import {IERC20} from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import {SafeCast} from "openzeppelin-contracts/contracts/utils/math/SafeCast.sol";
 import {StableFutureStructs} from "./libraries/StableFutureStructs.sol";
 import {StableFutureErrors} from "./libraries/StableFutureErrors.sol";
 import {StableFutureEvents} from "./libraries/StableFutureEvents.sol";
@@ -11,13 +12,9 @@ import {ERC20LockableUpgradeable} from "./utilities/ERC20LockableUpgradeable.sol
 import {ModuleUpgradeable} from "./abstracts/ModuleUpgradeable.sol";
 import {SignedMath} from "openzeppelin-contracts/contracts/utils/math/SignedMath.sol";
 
-/**
- * TODO:
- *     -
- *     -
- *     -
- *     -
- */
+/// TODO:
+// + move functions that calculte fundings to library contract
+// + add natspec
 
 /// @title StableFutureVault
 /// @notice Contains state to be reused by different modules/contracts of the system.
@@ -26,6 +23,8 @@ import {SignedMath} from "openzeppelin-contracts/contracts/utils/math/SignedMath
 contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, ModuleUpgradeable {
     using SafeERC20 for IERC20;
     using SignedMath for int256;
+    using SafeCast for int256;
+    using SafeCast for uint256;
 
     StableFutureStructs.GlobalPosition _globalPosition;
 
@@ -46,7 +45,7 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
     uint64 public maxExecutabilityAge;
 
     /// @notice The total amount of RETH deposited in the vault
-    uint256 public totalDepositedLiquidity;
+    uint256 public lpTotalDepositedLiquidity;
 
     /// @notice Minimum liquidity to provide as a first depositor
     uint256 public constant MIN_LIQUIDITY = 10_000;
@@ -143,7 +142,7 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
         _mint(account, liquidityMinted);
 
         // update total deposit in the pool
-        updateTotalVaulDeposit(int256(depositAmount));
+        _updateLpTotalDepositedLiquidity(int256(depositAmount));
 
         // Check if the liquidity provided respect the min liquidity to provide to avoid inflation
         // attacks and position with small amount of tokens
@@ -174,8 +173,8 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
         // Burn SFR tokens
         _burn(_account, withdrawAmount);
 
-        // update the totalDepositedLiquidity;
-        updateTotalVaulDeposit(-int256(_amountOut));
+        // update the lpTotalDepositedLiquidity;
+        _updateLpTotalDepositedLiquidity(-int256(_amountOut));
 
         emit StableFutureEvents.Withdraw(_account, withdrawAmount, _amountOut);
     }
@@ -216,7 +215,7 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
         uint256 totalSupply = totalSupply();
 
         if (totalSupply > 0) {
-            _collateralPerShare = (totalDepositedLiquidity * (10 ** decimals())) / totalSupply;
+            _collateralPerShare = (lpTotalDepositedLiquidity * (10 ** decimals())) / totalSupply;
         } else {
             _collateralPerShare = 1e18;
         }
@@ -240,24 +239,26 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
 
     // NOTE: Allow only this contract/Module to called this function or other contract can called it
     // If it's only called by this contract I'll set it up to private
-    // THIS function must be added to the execute announcedDeposit to update the totalDepositedLiquidity
+    // THIS function must be added to the execute announcedDeposit to update the lpTotalDepositedLiquidity
     /**
      * @dev Updates the total deposit amount in the vault with a new deposit.
-     * @param _newDeposit Amount to be added to the total vault deposit.
+     * @param _adjustedLiquidityAmount Amount to
      */
-    function updateTotalVaulDeposit(int256 _newDeposit) public onlyAuthorizedModule {
-        // totalDepositedLiquidity
-        // on deposit = 100 + (10) = 110;
-        // on withdraw = 100 + (-10) = 90;
-        int256 newTotalVaultDeposit = int256(totalDepositedLiquidity) + _newDeposit;
+    function updateLpTotalDepositedLiquidity(int256 _adjustedLiquidityAmount) public onlyAuthorizedModule {
+        _updateLpTotalDepositedLiquidity(_adjustedLiquidityAmount);
+    }
 
-        totalDepositedLiquidity = (newTotalVaultDeposit > 0) ? uint256(newTotalVaultDeposit) : 0;
+    function _updateLpTotalDepositedLiquidity(int256 _adjustedLiquidityAmount) private {
+        int256 newTotalDepositedLiquidity = int256(lpTotalDepositedLiquidity) + _adjustedLiquidityAmount;
+
+        if (newTotalDepositedLiquidity < 0) revert StableFutureErrors.valueNotPositive("newTotalDepositedLiquidity");
+        lpTotalDepositedLiquidity = newTotalDepositedLiquidity.toUint256();
     }
 
     /**
      * @dev calculate funding fees between longs and LPs
      * @notice If funding fees positive, long pays shorts and vice versa
-    */
+     */
     function settleFundingFees() public {
         // get unrecoded funding fees since last calculation
         (int256 fundingChangeSinceRecomputed, int256 unrecordedFunding) = _getUnrecordedFunding();
@@ -266,40 +267,46 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
         lastRecomputedFundingRate += fundingChangeSinceRecomputed;
         lastRecomputedFundingTimestamp += (block.timestamp).toUint64();
 
+        int256 accruedFundingFees = _calcAccruedTotalFundingByLongs(unrecordedFunding);
 
+        // Adjust longs margin
+        // if accruedFundingFees is negative(longspayshorts) we deduct from margin else we add to margin(shortPayLong)
+        _globalPosition.totalDepositedMargin = _globalPosition.totalDepositedMargin + accruedFundingFees;
+
+        // Adjust Short deposited liquidity
+        // If accruedFundingFees is negative(longspayshorts) we add to shorts deposited liquidity else deduct from it(shortPayLong)
+        _updateLpTotalDepositedLiquidity(-accruedFundingFees);
+
+        emit StableFutureEvents.FundingFeesSettled(accruedFundingFees);
     }
 
-
-    function _calcAccruedTotalFundingByLongs(
-        int256 unrecordedFunding
-    )
+    function _calcAccruedTotalFundingByLongs(int256 unrecordedFunding)
         internal
-        pure
-        returns(int256 totalAccruedFunding) {
-            // ** if unrecorded funding > 0 => markPrice > indexPrice => long pay shorts
-            // accruedFundingTotal = -100e18 * 0.25e18 = - result => the function returns -accruedFundingTotal
-            // to be used inside the settle funding to deduct from the total margin of longs.
-            // ** if unrecorded funding => markPrice < index(spot) price => shorts pay longs
-            // accruedFundingTotal = -100e18 * -0.25e18 = + result => the function returns +accruedFundingTotal
-            // to be used inside the the settle funding and add it to the total margin of longs.
-            // formula: totalSizeOpened * unrecordedFunding
-            totalAccruedFunding = -int256(_globalPosition.totalOpenedPositions) * unrecordedFunding / UNIT;
+        view
+        returns (int256 totalAccruedFunding)
+    {
+        // ** if unrecorded funding > 0 => markPrice > indexPrice => long pay shorts
+        // accruedFundingTotal = -100e18 * 0.25e18 = - result => the function returns -accruedFundingTotal
+        // to be used inside the settle funding to deduct from the total margin of longs.
+        // ** if unrecorded funding => markPrice < index(spot) price => shorts pay longs
+        // accruedFundingTotal = -100e18 * -0.25e18 = + result => the function returns +accruedFundingTotal
+        // to be used inside the the settle funding and add it to the total margin of longs.
+        // formula: totalSizeOpened * unrecordedFunding
+        totalAccruedFunding = -int256(_globalPosition.totalOpenedPositions) * unrecordedFunding / UNIT;
 
-            // NOTE: added 1 wei to the total funding accrued by long to avoid rounding issue.
-            return (totalAccruedFunding != 0) ? totalAccruedFunding + 1 : totalAccruedFunding;
-        } 
+        // NOTE: added 1 wei to the total funding accrued by long to avoid rounding issue.
+        return (totalAccruedFunding != 0) ? totalAccruedFunding + 1 : totalAccruedFunding;
+    }
 
     /**
      * @dev calculate the unrecorded funding amount based on market skew ans time elapsed
-    */
-    function _getUnrecordedFunding() 
-        internal
-        returns (int256 fundingChangeSinceRecomputed, int256 unrecordedFunding) {
+     */
+    function _getUnrecordedFunding() internal returns (int256 fundingChangeSinceRecomputed, int256 unrecordedFunding) {
         // calculte how imbalance the market is(skew)
         // formula: TotalOpenPosition - 'totalliquidity deposited by Liquidity providers
         int256 propotionalSkew = _calcPropotionalSkew({
-            _skew: int256(_globalPosition.totalDepositedMargin) - int256(totalDepositedLiquidity),
-            _totalDepositedLiquidity: totalDepositedLiquidity
+            _skew: int256(_globalPosition.totalDepositedMargin) - int256(lpTotalDepositedLiquidity),
+            _totalDepositedLiquidity: lpTotalDepositedLiquidity
         });
 
         // Calculates how much the funding rate has changed since the last update.

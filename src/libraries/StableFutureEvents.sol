@@ -23,4 +23,6 @@ library StableFutureEvents {
     event AssetSet(address newAsset);
 
     event MaxPriceDiffPerecentSet(uint256 maxPriceDiffPercent);
+
+    event FundingFeesSettled(int256 settleFundingFees);
 }
