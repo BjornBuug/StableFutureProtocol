@@ -254,17 +254,47 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
         totalDepositedLiquidity = (newTotalVaultDeposit > 0) ? uint256(newTotalVaultDeposit) : 0;
     }
 
+    /**
+     * @dev calculate funding fees between longs and LPs
+     * @notice If funding fees positive, long pays shorts and vice versa
+    */
     function settleFundingFees() public {
-        _getUnrecordedFunding();
+        // get unrecoded funding fees since last calculation
+        (int256 fundingChangeSinceRecomputed, int256 unrecordedFunding) = _getUnrecordedFunding();
+
+        // update the lastest funding rate and block timestamp
+        lastRecomputedFundingRate += fundingChangeSinceRecomputed;
+        lastRecomputedFundingTimestamp += (block.timestamp).toUint64();
+
+
     }
 
+
+    function _calcAccruedTotalFundingByLongs(
+        int256 unrecordedFunding
+    )
+        internal
+        pure
+        returns(int256 totalAccruedFunding) {
+            // ** if unrecorded funding > 0 => markPrice > indexPrice => long pay shorts
+            // accruedFundingTotal = -100e18 * 0.25e18 = - result => the function returns -accruedFundingTotal
+            // to be used inside the settle funding to deduct from the total margin of longs.
+            // ** if unrecorded funding => markPrice < index(spot) price => shorts pay longs
+            // accruedFundingTotal = -100e18 * -0.25e18 = + result => the function returns +accruedFundingTotal
+            // to be used inside the the settle funding and add it to the total margin of longs.
+            // formula: totalSizeOpened * unrecordedFunding
+            totalAccruedFunding = -int256(_globalPosition.totalOpenedPositions) * unrecordedFunding / UNIT;
+
+            // NOTE: added 1 wei to the total funding accrued by long to avoid rounding issue.
+            return (totalAccruedFunding != 0) ? totalAccruedFunding + 1 : totalAccruedFunding;
+        } 
+
     /**
-     * @dev
-     * @return fundingChangeSinceRecomputed the change in the funding rate since the last recomputation
-     * to measure time elapsed since the last settelment
-     * @return unrecordedFunding total funding fees accrued but not recorded/setteled yet
-     */
-    function _getUnrecordedFunding() internal returns (int256 fundingChangeSinceRecomputed, int256 unrecordedFunding) {
+     * @dev calculate the unrecorded funding amount based on market skew ans time elapsed
+    */
+    function _getUnrecordedFunding() 
+        internal
+        returns (int256 fundingChangeSinceRecomputed, int256 unrecordedFunding) {
         // calculte how imbalance the market is(skew)
         // formula: TotalOpenPosition - 'totalliquidity deposited by Liquidity providers
         int256 propotionalSkew = _calcPropotionalSkew({
@@ -324,10 +354,12 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
         // check if the _propotionalSkew is greater thn zero
         if (_propotionalSkew > 0) {
             currfundingVelocity = _propotionalSkew * int256(_maxFundingVelocity) / int256(_maxSkewVelocity);
-            // make sure fundingVelocity whitin maxfundinVelocity
+            // make sure fundingVelocity whitin maxfundinVelocity to present the fundingRat of rising too quickly
             return int256(maxFundingVelocity).min(currfundingVelocity.max(-int256(maxFundingVelocity)));
         }
-
+        // no capping if _propotional skew is negative because more it get negative
+        // more it makes the funding rate decreased and make it attractive for longs to open take longs positions.
+        // which wil spend up the reblancing process of the market
         return _propotionalSkew * int256(_maxFundingVelocity) / UNIT;
     }
 
