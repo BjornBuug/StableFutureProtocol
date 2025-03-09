@@ -282,10 +282,9 @@ contract AnnounceOrders is ReentrancyGuardUpgradeable, ModuleUpgradeable, Oracle
      * @dev Calculates the future timestamp when an order becomes executable.
      * @return executeAtTime The timestamp at which a new order will become executable, based on the vault's minimum executability age.
      */
-    function _orderExecutionTime(uint256 _keeperFee) private view returns (uint64 executeAtTime) {
-        // Todo: Cancel pending orders
-        // Check for Minmum amount of keeperFee
-        // settle fundingFees
+    function _orderExecutionTime(uint256 _keeperFee) private returns (uint64 executeAtTime) {
+        vault.settleFundingFees();
+        vault.verifyGlobalMarginStatus();
 
         // @audit-info setModules when doing unit test
         if (_keeperFee < IKeeperFee(vault.moduleAddress(StableModuleKeys._KEEPER_FEE_MODULE_KEY)).getKeeperFee()) {

@@ -8,6 +8,10 @@ library StableFutureErrors {
         chainlinkOracle,
         pythOracle
     }
+    
+    error InsufficientGlobalMargin();
+
+    error DepositCapReached(string variableName);
 
     error ZeroAddress(string variableName);
 

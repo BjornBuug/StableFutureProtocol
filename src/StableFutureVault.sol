@@ -47,6 +47,9 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
     /// @notice The total amount of RETH deposited in the vault
     uint256 public lpTotalDepositedLiquidity;
 
+    /// @notice Max amount of liquidity to be deposited in the vault by LP
+    uint256 public lpTotalDepositedLiquidityCap;
+
     /// @notice Minimum liquidity to provide as a first depositor
     uint256 public constant MIN_LIQUIDITY = 10_000;
 
@@ -113,7 +116,6 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
 
     // Collateral can only be transfered by authorized contracts/Module set by the Admin
     function transferCollateral(address to, uint256 amount) external onlyAuthorizedModule {
-        // add more security here...
         collateral.safeTransfer(to, amount);
     }
 
@@ -248,11 +250,26 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
         _updateLpTotalDepositedLiquidity(_adjustedLiquidityAmount);
     }
 
+    /// @dev check if the new deposited liquidity amount in the vault doesn't execced cap
+    function verifyTotalDepsitedLiquidityCap(uint256 _depositedAmount) public view {
+        uint256 newTotalDepositedLiquidity = lpTotalDepositedLiquidity + _depositedAmount;
+        if (newTotalDepositedLiquidity > lpTotalDepositedLiquidityCap) {
+            revert StableFutureErrors.DepositCapReached("newTotalDepositedLiquidity");
+        }
+    }
+
     function _updateLpTotalDepositedLiquidity(int256 _adjustedLiquidityAmount) private {
         int256 newTotalDepositedLiquidity = int256(lpTotalDepositedLiquidity) + _adjustedLiquidityAmount;
 
         if (newTotalDepositedLiquidity < 0) revert StableFutureErrors.valueNotPositive("newTotalDepositedLiquidity");
         lpTotalDepositedLiquidity = newTotalDepositedLiquidity.toUint256();
+    }
+
+    // revert if the current deposited margin by traders is negative
+    // so the protocol doesn't take more positions to not owe funding for more than it has in deposit
+    function verifyGlobalMarginStatus() public {
+        int256 currentGlobalMargin = _globalPosition.totalDepositedMargin;
+        if (currentGlobalMargin < 0) revert StableFutureErrors.InsufficientGlobalMargin();
     }
 
     /**

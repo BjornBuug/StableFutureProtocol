@@ -66,7 +66,9 @@ interface IStableFutureVault {
 
     // function deletePosition(uint256 _tokenId) external;
 
-    // function settleFundingFees() external returns (int256 fundingFees);
+    function settleFundingFees() external;
+
+    function verifyGlobalMarginStatus() external;
 
     // function getCurrentFundingRate() external view returns (int256 fundingRate);
 
