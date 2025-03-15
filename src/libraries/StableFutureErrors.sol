@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: MIT
 pragma solidity =0.8.28;
 
 import {StableFutureStructs} from "./StableFutureStructs.sol";
@@ -8,7 +8,7 @@ library StableFutureErrors {
         chainlinkOracle,
         pythOracle
     }
-    
+
     error InsufficientGlobalMargin();
 
     error DepositCapReached(string variableName);
