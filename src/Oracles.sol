@@ -6,7 +6,7 @@ import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/Safe
 import {StableFutureStructs} from "src/libraries/StableFutureStructs.sol";
 import {StableFutureErrors} from "src/libraries/StableFutureErrors.sol";
 import {StableFutureEvents} from "src/libraries/StableFutureEvents.sol";
-import {StableModuleKeys} from "src/libraries/StableModuleKeys.sol";
+import {Keys} from "src/libraries/Keys.sol";
 import {ReentrancyGuardUpgradeable} from
     "openzeppelin-contracts-upgradeable/contracts/utils/ReentrancyGuardUpgradeable.sol";
 import {ModuleUpgradeable} from "src/abstracts/ModuleUpgradeable.sol";
@@ -52,7 +52,7 @@ contract Oracles is ReentrancyGuardUpgradeable, ModuleUpgradeable {
         StableFutureStructs.PythNetworkOracle calldata _newPythNetworkOracle,
         uint256 _maxPriceDiffPercent
     ) external initializer {
-        __init_Module(StableModuleKeys._ORACLE_MODULE_KEY, _vault);
+        __Module_init(Keys._ORACLE_KEY, _vault);
         __ReentrancyGuard_init();
 
         _setchainlinkOracle(_newchainlinkOracle);

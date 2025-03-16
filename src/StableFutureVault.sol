@@ -4,13 +4,13 @@ pragma solidity =0.8.28;
 import {IERC20} from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {SafeCast} from "openzeppelin-contracts/contracts/utils/math/SafeCast.sol";
-import {StableFutureStructs} from "./libraries/StableFutureStructs.sol";
-import {StableFutureErrors} from "./libraries/StableFutureErrors.sol";
-import {StableFutureEvents} from "./libraries/StableFutureEvents.sol";
-import {PerpMath} from "./libraries/PerpMath.sol";
+import {StableFutureStructs} from "src/libraries/StableFutureStructs.sol";
+import {StableFutureErrors} from "src/libraries/StableFutureErrors.sol";
+import {StableFutureEvents} from "src/libraries/StableFutureEvents.sol";
+import {PerpMath} from "src/libraries/PerpMath.sol";
 import {OwnableUpgradeable} from "openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import {ERC20LockableUpgradeable} from "./utilities/ERC20LockableUpgradeable.sol";
-import {ModuleUpgradeable} from "./abstracts/ModuleUpgradeable.sol";
+import {ERC20LockableUpgradeable} from "src/utilities/ERC20LockableUpgradeable.sol";
+import {ModuleUpgradeable} from "src/abstracts/ModuleUpgradeable.sol";
 
 /// TODO:
 // + move functions that calculte fundings to library contract
@@ -283,12 +283,11 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
         // get unrecoded funding fees since last calculation
         (int256 fundingChangeSinceRecomputed, int256 unrecordedFunding) = _getUnrecordedFunding();
 
-        // TODO: update cumulatives funding rate
         cumulativeFundingRate = PerpMath.updateCumulativeFundingRate(unrecordedFunding, cumulativeFundingRate);
 
         // update the lastest funding rate and block timestamp
         lastRecomputedFundingRate += fundingChangeSinceRecomputed;
-        lastRecomputedFundingTimestamp += (block.timestamp).toUint64();
+        lastRecomputedFundingTimestamp += block.timestamp;
 
         int256 accruedFundingFees = PerpMath._calcAccruedTotalFundingByLongs(_globalPosition, unrecordedFunding);
 
@@ -359,7 +358,7 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
     }
 
     function setWithdrawCollateralFee(uint256 _withdrawCollateralFee) public onlyVaultOwner {
-        // MaxFee = 1% = 1e16
+        // MaxFee = 1% = 1e18
         if (_withdrawCollateralFee < 0 || _withdrawCollateralFee > 1e16) {
             revert StableFutureErrors.InvalidValue(_withdrawCollateralFee);
         }

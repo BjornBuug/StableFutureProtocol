@@ -49,7 +49,7 @@ abstract contract ModuleUpgradeable {
     /// @dev Function to initilize the module
     /// @param _moduleKey the bytes32 encoded key of the module
     /// @param _vault StableFutureVault address
-    function __init_Module(bytes32 _moduleKey, IStableFutureVault _vault) internal {
+    function __Module_init(bytes32 _moduleKey, IStableFutureVault _vault) internal {
         if (_moduleKey == bytes32("")) {
             revert StableFutureErrors.ModuleKeyEmpty();
         }

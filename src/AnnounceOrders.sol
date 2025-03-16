@@ -6,16 +6,16 @@ import {ReentrancyGuardUpgradeable} from
 import {IERC20} from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import {SafeERC20} from "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {SignedMath} from "openzeppelin-contracts/contracts/utils/math/SignedMath.sol";
-import {IStableFutureVault} from "./interfaces/IStableFutureVault.sol";
-import {StableModuleKeys} from "./libraries/StableModuleKeys.sol";
-import {ModuleUpgradeable} from "./abstracts/ModuleUpgradeable.sol";
-import {StableFutureStructs} from "./libraries/StableFutureStructs.sol";
-import {StableFutureEvents} from "./libraries/StableFutureEvents.sol";
-import {StableFutureErrors} from "./libraries/StableFutureErrors.sol";
-import {IOracles} from "./interfaces/IOracles.sol";
-import {IKeeperFee} from "./interfaces/IKeeperFee.sol";
-import {ERC20LockableUpgradeable} from "./utilities/ERC20LockableUpgradeable.sol";
-import {OraclesModifiers} from "./abstracts/OraclesModifiers.sol";
+import {IStableFutureVault} from "src/interfaces/IStableFutureVault.sol";
+import {Keys} from "src/libraries/Keys.sol";
+import {ModuleUpgradeable} from "src/abstracts/ModuleUpgradeable.sol";
+import {StableFutureStructs} from "src/libraries/StableFutureStructs.sol";
+import {StableFutureEvents} from "src/libraries/StableFutureEvents.sol";
+import {StableFutureErrors} from "src/libraries/StableFutureErrors.sol";
+import {IOracles} from "src/interfaces/IOracles.sol";
+import {IKeeperFee} from "src/interfaces/IKeeperFee.sol";
+import {ERC20LockableUpgradeable} from "src/utilities/ERC20LockableUpgradeable.sol";
+import {OraclesModifiers} from "src/abstracts/OraclesModifiers.sol";
 
 // TODO
 /**
@@ -56,7 +56,7 @@ contract AnnounceOrders is ReentrancyGuardUpgradeable, ModuleUpgradeable, Oracle
      * @param _vault The StableFutureVault contract address this module will interact with.
      */
     function initialize(IStableFutureVault _vault) external initializer {
-        __init_Module(StableModuleKeys._ANNOUNCE_ORDERS_MODULE_KEY, _vault);
+        __Module_init(Keys._ANNOUNCE_ORDERS_KEY, _vault);
         __ReentrancyGuard_init();
     }
 
@@ -287,7 +287,7 @@ contract AnnounceOrders is ReentrancyGuardUpgradeable, ModuleUpgradeable, Oracle
         vault.verifyGlobalMarginStatus();
 
         // @audit-info setModules when doing unit test
-        if (_keeperFee < IKeeperFee(vault.moduleAddress(StableModuleKeys._KEEPER_FEE_MODULE_KEY)).getKeeperFee()) {
+        if (_keeperFee < IKeeperFee(vault.moduleAddress(Keys._KEEPER_FEE_KEY)).getKeeperFee()) {
             revert StableFutureErrors.InvalidFee(_keeperFee);
         }
 

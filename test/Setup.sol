@@ -20,7 +20,7 @@ import {Oracles} from "src/Oracles.sol";
  * LIBRARIES ****************************
  */
 import {StableFutureStructs} from "src/libraries/StableFutureStructs.sol";
-import {StableModuleKeys} from "src/libraries/StableModuleKeys.sol";
+import {Keys} from "src/libraries/Keys.sol";
 
 /**
  * INTERFACES ****************************
