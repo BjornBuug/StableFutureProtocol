@@ -68,6 +68,9 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
     /// @notice module address to bool
     mapping(address moduleAddress => bool authorized) public isAuthorizedModule;
 
+    /// @notice token to position details
+    mapping(uint256 tokenId => StableFutureStructs.Position position) public positions;
+    
     // @notice withdrawColateraFee taken by the protocol for every withdraw
     uint256 public withdrawCollateralFee;
 
@@ -76,7 +79,7 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
-    } // on deployment time(it's not save on EVM)
+    }
 
     /**
      * @dev Initializes the contract
@@ -328,6 +331,14 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
             _prevFundingTimestamp: lastRecomputedFundingTimestamp
         });
     }
+
+    // get position for single traders
+    function getPosition(uint256 tokenId) 
+            public
+            view 
+            returns(StableFutureVault.Position memory traderPosition) {
+        return  positions[tokenId];
+    } 
 
     /////////////////////////////////////////////
     //            Setter Functions             //

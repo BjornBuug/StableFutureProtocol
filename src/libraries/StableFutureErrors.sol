@@ -21,6 +21,8 @@ library StableFutureErrors {
 
     error InvalidValue(uint256 value);
 
+    error InvalidBounds(uint256 lowerBound, uint256 upperBound);
+
     error valueNotPositive(string variableName);
 
     error OnlyVaultOwner(address msgSender);
@@ -59,4 +61,6 @@ library StableFutureErrors {
 
     error ETHPriceInvalid();
     error ETHPriceStale();
+
+    error NotLiquidatable(uint256 tokenId);
 }

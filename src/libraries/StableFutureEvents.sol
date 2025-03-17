@@ -25,4 +25,8 @@ library StableFutureEvents {
     event MaxPriceDiffPerecentSet(uint256 maxPriceDiffPercent);
 
     event FundingFeesSettled(int256 settleFundingFees);
+
+    event LiquidationFeeRatioModified(uint256 oldRatio, uint256 newRatio);
+    event LiquidationBufferRatioModified(uint256 oldBufferRatio, uint256 newBufferRatio);
+    event LiquidationFeeBoundsModified(uint256 oldLowerBoundFee, uint256 oldUpperBoundfee, uint256 newLowerBoundFee, uint256 newUpperBoundFee);
 }

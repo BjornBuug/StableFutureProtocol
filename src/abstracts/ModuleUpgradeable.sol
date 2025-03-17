@@ -2,19 +2,17 @@
 pragma solidity =0.8.28;
 
 import {OwnableUpgradeable} from "openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import {IStableFutureVault} from "../interfaces/IStableFutureVault.sol";
-import {StableFutureErrors} from "../libraries/StableFutureErrors.sol";
-import {IOracles} from "../interfaces/IOracles.sol";
+import {Initializable} from "openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
+import {IStableFutureVault} from "src/interfaces/IStableFutureVault.sol";
+import {StableFutureErrors} from "src/libraries/StableFutureErrors.sol";
+import {IOracles} from "src/interfaces/IOracles.sol";
 
-abstract contract ModuleUpgradeable {
+abstract contract ModuleUpgradeable is Initializable {
     bytes32 public MODULE_KEY;
-
-    // Define the interface of the StableFutureVault contract
+        
     IStableFutureVault public vault;
 
-    // Define the oracle interface
-
-    // Only owner modifier
+    // Only Vault owner
     modifier onlyVaultOwner() {
         if (OwnableUpgradeable(address(vault)).owner() != msg.sender) {
             revert StableFutureErrors.OnlyVaultOwner(msg.sender);
@@ -29,15 +27,9 @@ abstract contract ModuleUpgradeable {
         _;
     }
 
-    /**
-     * Create a function that allow to set the encode version of the key module and the vault address each time
-     *     we initilize new upgradable conract
-     *     1- has 2 params
-     *     2- Check if the module exist and check that the vault is not address(0)
-     */
-
+    
     /// @notice Setter for the vault contract.
-    /// @dev Can be used in case StableFutureVault ever changes.
+    /// @dev Can be used in case StableFutureVault ever changes 
     function setVault(IStableFutureVault _vault) external onlyVaultOwner {
         if (address(_vault) == address(0)) {
             revert StableFutureErrors.ZeroAddress("vault");
@@ -59,7 +51,6 @@ abstract contract ModuleUpgradeable {
         MODULE_KEY = _moduleKey;
         vault = _vault;
     }
-
-    // Add Gaps in case we want to add more variable later for a specific contract
+    
     uint256[48] private __gap;
 }

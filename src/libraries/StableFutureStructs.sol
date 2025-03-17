@@ -19,6 +19,13 @@ library StableFutureStructs {
         uint256 totalOpenedPositions;
     }
 
+    struct Position {
+        uint256 averageEntryPrice;
+        uint256 marginDeposited;
+        uint256 additionalSize;
+        uint256 entryCumulativeFunding;
+    }
+
     struct Order {
         OrderType orderType;
         bytes orderData;
@@ -61,4 +68,6 @@ library StableFutureStructs {
         bytes32 moduleKey;
         address moduleAddress;
     }
+
+
 }

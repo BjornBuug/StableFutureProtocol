@@ -37,4 +37,7 @@ interface IStableFutureVault {
     function settleFundingFees() external;
 
     function verifyGlobalMarginStatus() external;
+
+    function getPosition( uint256 tokenId) 
+        external view returns(StableFutureStructs.Position memory position);
 }
