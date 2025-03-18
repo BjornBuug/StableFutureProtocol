@@ -28,6 +28,7 @@ interface IStableFutureVault {
     function lastRecomputedFundingTimestamp() external view returns (uint256);
     function lastRecomputedFundingRate() external view returns (int256);
     function lpTotalDepositedLiquidity() external view returns (uint256);
+    function cumulativeFundingRate() external view returns (uint256);
     function maxSkewVelocity() external view returns (uint256);
     function maxFundingVelocity() external view returns (uint256);
 

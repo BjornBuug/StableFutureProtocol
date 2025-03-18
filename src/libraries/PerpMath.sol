@@ -115,7 +115,7 @@ library PerpMath {
 
     function _isLiquidatable(
         StableFutureStructs.Position memory position,
-        int256 _currentprice,
+        uint256 _currentPrice,
         int256 _nextFundingEntry,
         uint256 _liquidationFeeRatio,
         uint256 _liquidationBufferRatio,
@@ -129,16 +129,109 @@ library PerpMath {
 
         // calculte the remaining margin of the position after accounting(+-)
         // losses, profit, accured funding since entry
-        StableFutureStructs.PositionRecap memory positionRecap = _getPositionRecap({});
+        StableFutureStructs.PositionRecap memory positionRecap =
+            _getPositionRecap(position, _nextFundingEntry, _currentPrice);
+
+        uint256 minLiquidatinMargin = _calcMinLiquidationMargin(
+            position,
+            _liquidationFeeRatio,
+            _liquidationBufferRatio,
+            _liquidationFeeUpperBound,
+            _liquidationFeeLowerBound,
+            _currentPrice
+        );
+
+        // Check whether the position is liquidatable or not after settlement (fees, PNL)
+        return positionRecap.settledMargin <= int256(minLiquidatinMargin);
+    }
+
+    /// @dev min liquidation margin consists of adding buffer & deduction of liquidation fee, keep fee,
+    function _calcMinLiquidationMargin(
+        StableFutureStructs.Position memory position,
+        uint256 _liquidationFeeRatio,
+        uint256 _liquidationBufferRatio,
+        uint256 _liquidationFeeUpperBound,
+        uint256 _liquidationFeeLowerBound,
+        uint256 _currentPrice
+    ) internal pure returns (uint256 minMargin) {
+        // calculate a position with a buffer
+        uint256 liquidationBuffer = position.additionalSize._multiplyDecimal(_liquidationBufferRatio);
+        return liquidationBuffer
+            + _calcLiquidationFee(
+                position, _liquidationFeeRatio, _liquidationFeeUpperBound, _liquidationFeeLowerBound, _currentPrice
+            );
+    }
+
+    //
+    function _calcLiquidationFee(
+        StableFutureStructs.Position memory position,
+        uint256 _liquidationFeeRatio,
+        uint256 _liquidationFeeUpperBound,
+        uint256 _liquidationFeeLowerBound,
+        uint256 _currentPrice
+    ) internal pure returns (uint256 liquidationFee) {
+        // Formula: positionSize * feeRatio * currentPrice
+        uint256 proportionalFee = position.additionalSize * _liquidationFeeRatio * _currentPrice;
+
+        // cap fee to fee upper bound if it exceeds it
+        uint256 cappedLiquidationFee =
+            proportionalFee > _liquidationFeeUpperBound ? _liquidationFeeUpperBound : proportionalFee;
+
+        // cap fee to fee lower bound if it's below it
+        uint256 feeInNumeraire =
+            cappedLiquidationFee < _liquidationFeeLowerBound ? _liquidationFeeLowerBound : cappedLiquidationFee;
+
+        // convert fee in USD back to the collateral asset unit
+        return feeInNumeraire * 1e18 / _currentPrice;
     }
 
     function _getPositionRecap(
         StableFutureStructs.Position memory position,
         int256 _nextFundingEntry,
         uint256 _currentPrice
-    ) internal view returns (StableFutureStructs.PositionRecap memory positionRecap) {
-        // 1.calculte profit and loss of the position
-        // 2. net funding rate position or negative
-        // 3. adjustMargin
+    ) internal pure returns (StableFutureStructs.PositionRecap memory positionRecap) {
+        // calculte profit and loss of the position
+        int256 profitLoss = _profitLoss(_currentPrice, position);
+
+        // net funding rate (position or negative)
+        int256 accrFunding = _accruedFunding(_nextFundingEntry, position);
+        int256 marginAfterSettlement = int256(position.marginDeposited) + profitLoss + accrFunding;
+
+        // adjustMargin in position summary after settelemnt
+        return StableFutureStructs.PositionRecap({
+            profitLoss: profitLoss,
+            accruedFunding: accrFunding,
+            settledMargin: marginAfterSettlement
+        });
+    }
+
+    // Calculate the accrued funding fees to pay or receive based on
+    // the funding net and position size
+    function _accruedFunding(int256 _nextFundingEntry, StableFutureStructs.Position memory position)
+        internal
+        pure
+        returns (int256 accrFunding)
+    {
+        // calc net funding
+        // negative => long pay short
+        // positive => short pay long
+        int256 net = int256(position.entryCumulativeFunding) - _nextFundingEntry;
+        return int256(position.additionalSize)._multiplyDecimal(net);
+    }
+
+    function _profitLoss(uint256 _currentPrice, StableFutureStructs.Position memory position)
+        internal
+        pure
+        returns (int256)
+    {
+        // calculte the price shift between the current price and the entryprice
+        int256 priceShift = int256(_currentPrice - position.averageEntryPrice);
+        int256 pnl = (int256(position.additionalSize) * (priceShift) * 10) / int256(_currentPrice);
+        if (pnl % 10 != 0) {
+            // rounding down due to truncation when dividing
+            return pnl / 10 - 1;
+        } else {
+            pnl / 10;
+        }
     }
 }

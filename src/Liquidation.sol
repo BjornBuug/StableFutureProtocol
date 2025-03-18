@@ -17,9 +17,9 @@ import {Keys} from "src/libraries/Keys.sol";
 import {ILiquidation} from "src/interfaces/ILiquidation.sol";
 import {IOracles} from "src/interfaces/IOracles.sol";
 import {IStableFutureVault} from "src/interfaces/IStableFutureVault.sol";
+// Todo: Add natspecs
 
 contract Liquidation is ILiquidation, ModuleUpgradeable, ReentrancyGuardUpgradeable {
-    // Todo: Add natspecs
     /// @notice liquidation fees in basis point paid to the liquidator
     /// @dev should include 18 decimals. e.g: 0.1% => 0.001e18 => 1e15;
     uint256 public liquidationFeeRatio;
@@ -64,6 +64,8 @@ contract Liquidation is ILiquidation, ModuleUpgradeable, ReentrancyGuardUpgradea
 
         // check if the position can be liquidated or not
         if (isLiquidatable(tokenId)) revert StableFutureErrors.NotLiquidatable(tokenId);
+
+        // to be continue...
     }
 
     // function check if a leverage position can be liquidatable or not
@@ -71,17 +73,25 @@ contract Liquidation is ILiquidation, ModuleUpgradeable, ReentrancyGuardUpgradea
         // get the current price
         (uint256 currentPrice,) = IOracles(vault.moduleAddress(Keys._ORACLE_KEY)).getPrice();
 
-        isLiquidatable(tokenId, currentPrice);
+        return isLiquidatable(tokenId, currentPrice);
     }
 
-    function isLiquidatable(uint256 _tokenId, uint256 _currentprice) public view returns (bool) {
+    function isLiquidatable(uint256 _tokenId, uint256 _currentPrice) public view returns (bool) {
         // get the position to check for liquidation
         StableFutureStructs.Position memory _position = vault.getPosition(_tokenId);
 
         // get accrued funding fees since last re computed to assess the position margin
-        int256 nextFundingEntry = _calcNextFundingEntry();
+        int256 _nextFundingEntry = _calcNextFundingEntry();
 
-        return PerpMath._isLiquidatable();
+        return PerpMath._isLiquidatable(
+            _position,
+            _currentPrice,
+            _nextFundingEntry,
+            liquidationFeeRatio,
+            liquidationBufferRatio,
+            liquidationFeeUpperBound,
+            liquidationFeeLowerBound
+        );
     }
 
     // calcule the current fundin rate
