@@ -9,7 +9,7 @@ import {IOracles} from "src/interfaces/IOracles.sol";
 
 abstract contract ModuleUpgradeable is Initializable {
     bytes32 public MODULE_KEY;
-        
+
     IStableFutureVault public vault;
 
     // Only Vault owner
@@ -27,9 +27,8 @@ abstract contract ModuleUpgradeable is Initializable {
         _;
     }
 
-    
     /// @notice Setter for the vault contract.
-    /// @dev Can be used in case StableFutureVault ever changes 
+    /// @dev Can be used in case StableFutureVault ever changes
     function setVault(IStableFutureVault _vault) external onlyVaultOwner {
         if (address(_vault) == address(0)) {
             revert StableFutureErrors.ZeroAddress("vault");
@@ -51,6 +50,6 @@ abstract contract ModuleUpgradeable is Initializable {
         MODULE_KEY = _moduleKey;
         vault = _vault;
     }
-    
+
     uint256[48] private __gap;
 }

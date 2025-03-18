@@ -12,6 +12,7 @@ library PerpMath {
 
     function _calcUnrecordedFunding(int256 _currentFundingRate, int256 _prevFundingRate, uint256 _prevFundingTimestamp)
         internal
+        view
         returns (int256)
     {
         // calculte the average of the current funding rate + previous funding rate
@@ -25,7 +26,7 @@ library PerpMath {
         uint256 _prevFundingTimeStamp,
         uint256 _maxFundingVelocity,
         uint256 _maxSkewVelocity
-    ) internal returns (int256) {
+    ) internal view returns (int256) {
         // calculate the funding rate changes since last time was updated
         // formula: fundinVelocity * timeElapsed / 1e18
         return _accruedFundingVelocity(_propotionalSkew, _maxFundingVelocity, _maxSkewVelocity)._multiplyDecimal(
@@ -33,18 +34,30 @@ library PerpMath {
         );
     }
 
-    function updateCumulativeFundingRate(int256 _unrecordedFunding, int256 _currentCumulativeFunding)
+    // calculate the current funding rate
+    function _calcCurrentFundingRate(
+        int256 _propotionalSkew,
+        uint256 _prevFundingTimestamp,
+        int256 _prevFundingRate,
+        uint256 _maxFundingVelocity,
+        uint256 _maxSkewVelocity
+    ) internal view returns (int256 currentFundingRate) {
+        return _prevFundingRate
+            + _fundingChangeSinceRecomputed(_propotionalSkew, _prevFundingTimestamp, _maxFundingVelocity, _maxSkewVelocity);
+    }
+
+    function _updateCumulativeFundingRate(int256 _unrecordedFunding, int256 _currentCumulativeFunding)
         internal
-        view
+        pure
         returns (int256)
     {
         return _unrecordedFunding + _currentCumulativeFunding;
     }
 
     function _calcAccruedTotalFundingByLongs(
-        StableFutureStructs.GlobalPosition memory _globalPosition,
+        StableFutureStructs.GlobalPositions memory _globalPositions,
         int256 _unrecordedFunding
-    ) internal view returns (int256 totalAccruedFunding) {
+    ) internal pure returns (int256 totalAccruedFunding) {
         // ** if unrecorded funding > 0 => markPrice > indexPrice => long pay shorts
         // accruedFundingTotal = -100e18 * 0.25e18 = - result => the function returns -accruedFundingTotal
         // to be used inside the settle funding to deduct from the total margin of longs.
@@ -52,7 +65,7 @@ library PerpMath {
         // accruedFundingTotal = -100e18 * -0.25e18 = + result => the function returns +accruedFundingTotal
         // to be used inside the the settle funding and add it to the total margin of longs.
         // formula: totalSizeOpened * unrecordedFunding
-        totalAccruedFunding = -int256(_globalPosition.totalOpenedPositions)._multiplyDecimal(_unrecordedFunding);
+        totalAccruedFunding = -int256(_globalPositions.totalOpenedPositions)._multiplyDecimal(_unrecordedFunding);
 
         // NOTE: added 1 wei to the total funding accrued by long to avoid rounding issue.
         return (totalAccruedFunding != 0) ? totalAccruedFunding + 1 : totalAccruedFunding;
@@ -66,7 +79,7 @@ library PerpMath {
 
     function _accruedFundingVelocity(int256 _propotionalSkew, uint256 _maxFundingVelocity, uint256 _maxSkewVelocity)
         internal
-        view
+        pure
         returns (int256 currfundingVelocity)
     {
         // check if the _propotionalSkew is greater thn zero
@@ -83,7 +96,7 @@ library PerpMath {
 
     function _calcPropotionalSkew(int256 _skew, uint256 _totalDepositedLiquidity)
         internal
-        view
+        pure
         returns (int256 pSkew)
     {
         if (_totalDepositedLiquidity > 0) {
@@ -98,5 +111,34 @@ library PerpMath {
             assert(_skew == 0);
             pSkew = 0;
         }
+    }
+
+    function _isLiquidatable(
+        StableFutureStructs.Position memory position,
+        int256 _currentprice,
+        int256 _nextFundingEntry,
+        uint256 _liquidationFeeRatio,
+        uint256 _liquidationBufferRatio,
+        uint256 _liquidationFeeUpperBound,
+        uint256 _liquidationFeeLowerBound
+    ) internal view returns (bool) {
+        // no need to check for liquidation for an empty position
+        if (position.additionalSize == 0) {
+            return false;
+        }
+
+        // calculte the remaining margin of the position after accounting(+-)
+        // losses, profit, accured funding since entry
+        StableFutureStructs.PositionRecap memory positionRecap = _getPositionRecap({});
+    }
+
+    function _getPositionRecap(
+        StableFutureStructs.Position memory position,
+        int256 _nextFundingEntry,
+        uint256 _currentPrice
+    ) internal view returns (StableFutureStructs.PositionRecap memory positionRecap) {
+        // 1.calculte profit and loss of the position
+        // 2. net funding rate position or negative
+        // 3. adjustMargin
     }
 }

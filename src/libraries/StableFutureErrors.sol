@@ -62,5 +62,7 @@ library StableFutureErrors {
     error ETHPriceInvalid();
     error ETHPriceStale();
 
+    error InvalidFeeValue(uint256 fee);
+
     error NotLiquidatable(uint256 tokenId);
 }

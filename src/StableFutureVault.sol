@@ -12,21 +12,18 @@ import {OwnableUpgradeable} from "openzeppelin-contracts-upgradeable/contracts/a
 import {ERC20LockableUpgradeable} from "src/utilities/ERC20LockableUpgradeable.sol";
 import {ModuleUpgradeable} from "src/abstracts/ModuleUpgradeable.sol";
 
-/// TODO:
-// + move functions that calculte fundings to library contract
-// + add natspec
-
 /// @title StableFutureVault
 /// @notice Contains state to be reused by different modules/contracts of the system.
-/// @dev Holds the rETH deposited by liquidity providers(shorts)
+/// @dev Holds the rETH deposited by liquidity providers(shorts) & order executions
 
 contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, ModuleUpgradeable {
     using SafeERC20 for IERC20;
     using SafeCast for int256;
     using SafeCast for uint256;
 
-    StableFutureStructs.GlobalPosition _globalPosition;
+    StableFutureStructs.GlobalPositions _globalPositions;
 
+    // The timestamp when the market skew & fundin rate was last recalculated
     uint256 lastRecomputedFundingTimestamp;
 
     uint256 maxFundingVelocity;
@@ -44,7 +41,7 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
     /// @notice The maximum amount of time that can expire between trade announcement and execution.
     uint64 public maxExecutabilityAge;
 
-    /// @notice The total amount of RETH deposited in the vault
+    /// @notice The total amount of liquidity RETH deposited in the vault
     uint256 public lpTotalDepositedLiquidity;
 
     /// @notice Max amount of liquidity to be deposited in the vault by LP
@@ -53,7 +50,7 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
     /// @notice Minimum liquidity to provide as a first depositor
     uint256 public constant MIN_LIQUIDITY = 10_000;
 
-    // the last recomputed funding rate for all traders(ca be negative)
+    // the last recomputed funding rate for all traders(can be negative)
     int256 public lastRecomputedFundingRate;
 
     // the total funding rate across of all the lifetime of the market(ca be negative)
@@ -70,8 +67,9 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
 
     /// @notice token to position details
     mapping(uint256 tokenId => StableFutureStructs.Position position) public positions;
-    
-    // @notice withdrawColateraFee taken by the protocol for every withdraw
+
+    /// @notice withdrawColateraFee taken by the protocol for every withdraw
+    /// @dev 1e18 = 100%
     uint256 public withdrawCollateralFee;
 
     /// @dev To prevent the implementation contract from being used, we should invoke the _disableInitializers
@@ -111,8 +109,12 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
 
         setExecutabilityAge(_minExecutabilityAge, _maxExecutabilityAge);
         setWithdrawCollateralFee(withdrawCollateralFee);
-    } // Contract runtime deployment(bytes code executed on EVM)
+    }
 
+    /**
+     * @dev Modifier to restrict access to authorized modules only.
+     * Reverts with `StableFutureErrors.OnlyAuthorizedModule` if the caller is not an authorized module.
+     */
     modifier onlyAuthorizedModule() {
         if (isAuthorizedModule[msg.sender] == false) {
             revert StableFutureErrors.OnlyAuthorizedModule(msg.sender);
@@ -120,7 +122,11 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
         _;
     }
 
-    // Collateral can only be transfered by authorized contracts/Module set by the Admin
+    /**
+     * @dev Transfers collateral to a specified address, callable only by authorized modules.
+     * @param to The address to receive the collateral.
+     * @param amount The amount of collateral to transfer.
+     */
     function transferCollateral(address to, uint256 amount) external onlyAuthorizedModule {
         collateral.safeTransfer(to, amount);
     }
@@ -158,10 +164,16 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
             revert StableFutureErrors.AmountToSmall({depositAmount: totalSupply(), minDeposit: MIN_LIQUIDITY});
         }
 
-        // TODO: Implement point system later
         emit StableFutureEvents.Deposit(account, depositAmount, liquidityMinted);
     }
 
+    /**
+     * @dev Execute withdrawal delayed order
+     * @param _account The account withdrawing the liquidity tokens.
+     * @param liquidityWithraw the withdrawal amount
+     * @return _amountOut Amount of collateral received after withdrawal.
+     * @return _withdrawFee Fee charged for the withdrawal.
+     */
     function _executeWithdraw(
         address _account,
         StableFutureStructs.AnnouncedLiquidityWithdraw calldata liquidityWithraw
@@ -187,6 +199,10 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
         emit StableFutureEvents.Withdraw(_account, withdrawAmount, _amountOut);
     }
 
+    /**
+     * @dev Sets an authorized module for the vault.(address => to key)
+     * @param _module Struct containing the module key and address.
+     */
     function setAuthorizedModule(StableFutureStructs.AuthorizedModule calldata _module) public onlyVaultOwner {
         if (_module.moduleKey == bytes32(0)) {
             revert StableFutureErrors.ZeroValue("moduleKey");
@@ -200,6 +216,10 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
         isAuthorizedModule[_module.moduleAddress] = true;
     }
 
+    /**
+     * @dev Sets multiple authorized module for the vault.(address => to key)
+     * @param _module Struct containing the module key and address.
+     */
     function setMultipleAuthorizedModule(StableFutureStructs.AuthorizedModule[] calldata _modules)
         external
         onlyVaultOwner
@@ -238,6 +258,11 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
         _amountOut = (_depositAmount * (10 ** decimals())) / collateralPerShare();
     }
 
+    /**
+     * @dev Estimates the withdrawal amount for a given liquidity token amount.
+     * @param _withdrawAmount The amount of liquidity tokens to withdraw.
+     * @return _amountOut Estimated amount to be received.
+     */
     function withdrawQuote(uint256 _withdrawAmount) external view returns (uint256 _amountOut) {
         _amountOut = (_withdrawAmount * collateralPerShare()) / (10 ** decimals());
 
@@ -249,14 +274,17 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
     // If it's only called by this contract I'll set it up to private
     // THIS function must be added to the execute announcedDeposit to update the lpTotalDepositedLiquidity
     /**
-     * @dev Updates the total deposit amount in the vault with a new deposit.
-     * @param _adjustedLiquidityAmount Amount to
+     * @dev Updates the total deposited liquidity in the vault.
+     * @param _adjustedLiquidityAmount Amount to adjust the total deposited liquidity by.
      */
     function updateLpTotalDepositedLiquidity(int256 _adjustedLiquidityAmount) public onlyAuthorizedModule {
         _updateLpTotalDepositedLiquidity(_adjustedLiquidityAmount);
     }
 
-    /// @dev check if the new deposited liquidity amount in the vault doesn't execced cap
+    /**
+     * @dev Verifies that the total deposited liquidity does not exceed the cap.
+     * @param _depositedAmount The new deposit amount to check against the cap.
+     */
     function verifyTotalDepsitedLiquidityCap(uint256 _depositedAmount) public view {
         uint256 newTotalDepositedLiquidity = lpTotalDepositedLiquidity + _depositedAmount;
         if (newTotalDepositedLiquidity > lpTotalDepositedLiquidityCap) {
@@ -264,6 +292,7 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
         }
     }
 
+    /// @dev for doc see: updateLpTotalDepositedLiquidity
     function _updateLpTotalDepositedLiquidity(int256 _adjustedLiquidityAmount) private {
         int256 newTotalDepositedLiquidity = int256(lpTotalDepositedLiquidity) + _adjustedLiquidityAmount;
 
@@ -273,30 +302,33 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
 
     // revert if the current deposited margin by traders is negative
     // so the protocol doesn't take more positions to not owe funding for more than it has in deposit
+    /**
+     * @dev Verifies that the global margin status is not negative.
+     */
     function verifyGlobalMarginStatus() public {
-        int256 currentGlobalMargin = _globalPosition.totalDepositedMargin;
+        int256 currentGlobalMargin = _globalPositions.totalDepositedMargin;
         if (currentGlobalMargin < 0) revert StableFutureErrors.InsufficientGlobalMargin();
     }
 
     /**
-     * @dev calculate funding fees between longs and LPs
+     * @dev Settles funding fees between long positions and liquidity providers.
      * @notice If funding fees positive, long pays shorts and vice versa
      */
     function settleFundingFees() public {
         // get unrecoded funding fees since last calculation
         (int256 fundingChangeSinceRecomputed, int256 unrecordedFunding) = _getUnrecordedFunding();
 
-        cumulativeFundingRate = PerpMath.updateCumulativeFundingRate(unrecordedFunding, cumulativeFundingRate);
+        cumulativeFundingRate = PerpMath._updateCumulativeFundingRate(unrecordedFunding, cumulativeFundingRate);
 
         // update the lastest funding rate and block timestamp
         lastRecomputedFundingRate += fundingChangeSinceRecomputed;
         lastRecomputedFundingTimestamp += block.timestamp;
 
-        int256 accruedFundingFees = PerpMath._calcAccruedTotalFundingByLongs(_globalPosition, unrecordedFunding);
+        int256 accruedFundingFees = PerpMath._calcAccruedTotalFundingByLongs(_globalPositions, unrecordedFunding);
 
         // Adjust longs margin
         // if accruedFundingFees is negative(longspayshorts) we deduct from margin else we add to margin(shortPayLong)
-        _globalPosition.totalDepositedMargin = _globalPosition.totalDepositedMargin + accruedFundingFees;
+        _globalPositions.totalDepositedMargin = _globalPositions.totalDepositedMargin + accruedFundingFees;
 
         // Adjust Short deposited liquidity
         // If accruedFundingFees is negative(longspayshorts) we add to shorts deposited liquidity else deduct from it(shortPayLong)
@@ -312,7 +344,7 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
         // calculte how imbalance the market is(skew)
         // formula: TotalOpenPosition - 'totalliquidity deposited by Liquidity providers
         int256 propotionalSkew = PerpMath._calcPropotionalSkew({
-            _skew: int256(_globalPosition.totalDepositedMargin) - int256(lpTotalDepositedLiquidity),
+            _skew: int256(_globalPositions.totalDepositedMargin) - int256(lpTotalDepositedLiquidity),
             _totalDepositedLiquidity: lpTotalDepositedLiquidity
         });
 
@@ -332,13 +364,26 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
         });
     }
 
-    // get position for single traders
-    function getPosition(uint256 tokenId) 
-            public
-            view 
-            returns(StableFutureVault.Position memory traderPosition) {
-        return  positions[tokenId];
-    } 
+    /**
+     * @dev Retrieves the position details for a specific trader based on token ID.
+     * @param tokenId The ID of the trader's position.
+     * @return positionDetails Struct containing the trader's position details.
+     */
+    function getPosition(uint256 tokenId) public view returns (StableFutureStructs.Position memory positionDetails) {
+        return positions[tokenId];
+    }
+
+    /**
+     * @dev Retrieves global position data for all leverage positions in the market.
+     * @return _globalPositionsDetails Struct containing global position details.
+     */
+    function getGlobalPositions()
+        public
+        view
+        returns (StableFutureStructs.GlobalPositions memory _globalPositionsDetails)
+    {
+        return _globalPositions;
+    }
 
     /////////////////////////////////////////////
     //            Setter Functions             //
@@ -360,26 +405,44 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
         maxExecutabilityAge = _maxExecutabilityAge;
     }
 
+    /**
+     * @dev Pauses a specific module in the vault.
+     * @param _moduleKey The key of the module to pause.
+     */
     function pauseModule(bytes32 _moduleKey) external onlyVaultOwner {
         isModulePaused[_moduleKey] = true;
     }
 
+    /**
+     * @dev Unpauses a specific module in the vault.
+     * @param _moduleKey The key of the module to unpause.
+     */
     function unpauseModule(bytes32 _moduleKey) external onlyVaultOwner {
         isModulePaused[_moduleKey] = false;
     }
 
     function setWithdrawCollateralFee(uint256 _withdrawCollateralFee) public onlyVaultOwner {
-        // MaxFee = 1% = 1e18
-        if (_withdrawCollateralFee < 0 || _withdrawCollateralFee > 1e16) {
-            revert StableFutureErrors.InvalidValue(_withdrawCollateralFee);
+        // Set fee cap to max 1%
+        if (_withdrawCollateralFee > 0.01e18) {
+            revert StableFutureErrors.InvalidFee(_withdrawCollateralFee);
         }
         withdrawCollateralFee = _withdrawCollateralFee;
     }
 
+    /**
+     * @dev Locks a specified amount of tokens for an account when announcing order
+     * @param account The account to lock tokens for.
+     * @param amount The amount of tokens to lock.
+     */
     function lock(address account, uint256 amount) public onlyAuthorizedModule {
         _lock(account, amount);
     }
 
+    /**
+     * @dev Unlocks a specified amount of tokens for an account.
+     * @param account The account to unlock tokens for.
+     * @param amount The amount of tokens to unlock.
+     */
     function unlock(address account, uint256 amount) public onlyAuthorizedModule {
         _unlock(account, amount);
     }

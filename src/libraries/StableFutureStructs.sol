@@ -13,7 +13,7 @@ library StableFutureStructs {
     }
 
     /// @notice Global position data
-    struct GlobalPosition {
+    struct GlobalPositions {
         int256 totalDepositedMargin;
         uint256 averagePrice;
         uint256 totalOpenedPositions;
@@ -24,6 +24,12 @@ library StableFutureStructs {
         uint256 marginDeposited;
         uint256 additionalSize;
         uint256 entryCumulativeFunding;
+    }
+
+    struct PositionRecap {
+        int256 profitLoss;
+        int256 accruedFunding;
+        int256 settledMargin;
     }
 
     struct Order {
@@ -68,6 +74,4 @@ library StableFutureStructs {
         bytes32 moduleKey;
         address moduleAddress;
     }
-
-
 }
