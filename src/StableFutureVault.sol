@@ -218,7 +218,7 @@ contract StableFutureVault is OwnableUpgradeable, ERC20LockableUpgradeable, Modu
 
     /**
      * @dev Sets multiple authorized module for the vault.(address => to key)
-     * @param _module Struct containing the module key and address.
+     * @param _modules Struct containing the module keys and addresss.
      */
     function setMultipleAuthorizedModule(StableFutureStructs.AuthorizedModule[] calldata _modules)
         external

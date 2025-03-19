@@ -121,18 +121,19 @@ library PerpMath {
         uint256 _liquidationBufferRatio,
         uint256 _liquidationFeeUpperBound,
         uint256 _liquidationFeeLowerBound
-    ) internal view returns (bool) {
+    ) internal pure returns (bool) {
         // no need to check for liquidation for an empty position
         if (position.additionalSize == 0) {
             return false;
         }
 
         // calculte the remaining margin of the position after accounting(+-)
-        // losses, profit, accured funding since entry
+        // losses, profits, accured funding since entry
         StableFutureStructs.PositionRecap memory positionRecap =
             _getPositionRecap(position, _nextFundingEntry, _currentPrice);
 
-        uint256 minLiquidatinMargin = _calcMinLiquidationMargin(
+        
+        uint256 minLiquidationMargin = _calcMinLiquidationMargin(
             position,
             _liquidationFeeRatio,
             _liquidationBufferRatio,
@@ -142,7 +143,7 @@ library PerpMath {
         );
 
         // Check whether the position is liquidatable or not after settlement (fees, PNL)
-        return positionRecap.settledMargin <= int256(minLiquidatinMargin);
+        return positionRecap.settledMargin <= int256(minLiquidationMargin);
     }
 
     /// @dev min liquidation margin consists of adding buffer & deduction of liquidation fee, keep fee,
@@ -158,20 +159,20 @@ library PerpMath {
         uint256 liquidationBuffer = position.additionalSize._multiplyDecimal(_liquidationBufferRatio);
         return liquidationBuffer
             + _calcLiquidationFee(
-                position, _liquidationFeeRatio, _liquidationFeeUpperBound, _liquidationFeeLowerBound, _currentPrice
+                position.additionalSize, _liquidationFeeRatio, _liquidationFeeUpperBound, _liquidationFeeLowerBound, _currentPrice
             );
     }
 
     //
     function _calcLiquidationFee(
-        StableFutureStructs.Position memory position,
+        uint256 additionalSize,
         uint256 _liquidationFeeRatio,
         uint256 _liquidationFeeUpperBound,
         uint256 _liquidationFeeLowerBound,
         uint256 _currentPrice
     ) internal pure returns (uint256 liquidationFee) {
         // Formula: positionSize * feeRatio * currentPrice
-        uint256 proportionalFee = position.additionalSize * _liquidationFeeRatio * _currentPrice;
+        uint256 proportionalFee = additionalSize * _liquidationFeeRatio * _currentPrice;
 
         // cap fee to fee upper bound if it exceeds it
         uint256 cappedLiquidationFee =
@@ -222,11 +223,11 @@ library PerpMath {
     function _profitLoss(uint256 _currentPrice, StableFutureStructs.Position memory position)
         internal
         pure
-        returns (int256)
+        returns (int256 pnl)
     {
         // calculte the price shift between the current price and the entryprice
         int256 priceShift = int256(_currentPrice - position.averageEntryPrice);
-        int256 pnl = (int256(position.additionalSize) * (priceShift) * 10) / int256(_currentPrice);
+        pnl = (int256(position.additionalSize) * (priceShift) * 10) / int256(_currentPrice);
         if (pnl % 10 != 0) {
             // rounding down due to truncation when dividing
             return pnl / 10 - 1;

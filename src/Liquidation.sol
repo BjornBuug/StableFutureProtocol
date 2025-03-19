@@ -59,13 +59,66 @@ contract Liquidation is ILiquidation, ModuleUpgradeable, ReentrancyGuardUpgradea
     }
 
     function liquidate(uint256 tokenId) public nonReentrant whenNotPaused {
+        
+        // get position
+        StableFutureStructs.Position memory position = vault.getPosition(tokenId);
+
+        // get current Price
+        (uint256 currentPrice, )= IOracles((vault.moduleAddress(Keys._ORACLE_KEY))).getPrice();
+        
         // settle funding fees accrued till now
         vault.settleFundingFees();
 
         // check if the position can be liquidated or not
         if (isLiquidatable(tokenId)) revert StableFutureErrors.NotLiquidatable(tokenId);
 
-        // to be continue...
+        // Since position is liquidatable: Let's settle liquidation fees from liquidated position margin
+
+        // get Position Recap
+        StableFutureStructs.PositionRecap memory positionRecap = PerpMath._getPositionRecap(
+            position,
+            vault.cumulativeFundingRate(),
+            currentPrice
+        );
+
+
+        // check if margin after deducting liquidation fee, PNL is positive or negative
+        // to see if can cover liquidation fee or not
+        int256 settledMargin = positionRecap.settledMargin;
+        uint256 liquidationFee;
+
+        if(settledMargin > 0) {
+            // calculte liquidatation fee to send to liquidator/msg.sender
+            uint256 expLiquidationFee = PerpMath._calcLiquidationFee(
+                position.additionalSize, 
+                liquidationFeeRatio,
+                liquidationFeeUpperBound,
+                liquidationFeeLowerBound,
+                currentPrice
+            );
+
+            int256 remaningMargin;
+
+            // The user might or might not have enough margin to cover exp Liquidation Fee
+            if(uint256(settledMargin) > expLiquidationFee) {
+                liquidationFee = expLiquidationFee;
+                remaningMargin = settledMargin - int256(expLiquidationFee);
+            } else {
+                liquidationFee = uint256(settledMargin);
+            }
+
+            // add/update the liquidity deposited by LP by [remaningMargin - profitLoss]
+            vault.updateLpTotalDepositedLiquidity(remaningMargin - positionRecap.profitLoss);
+
+            // send liquidation fee to the liquidator
+            vault.transferCollateral(msg.sender, liquidationFee);
+        } else {
+            // if remaningMargin is negative or 0 Lps has to bear the cost. the vault has to absorb the lost
+            vault.updateLpTotalDepositedLiquidity(remaningMargin - positionRecap.profitLoss);
+        }
+
+        
+
     }
 
     // function check if a leverage position can be liquidatable or not
